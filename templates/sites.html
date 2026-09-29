@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Sites &middot; SiteGuard{% endblock %}
+{% block head_extra %}
+{% if any_scanning %}
+<script>
+// A scan is running somewhere: refresh every 15s until it finishes.
+setTimeout(function () { location.reload(); }, 15000);
+</script>
+{% endif %}
+{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Add a site to monitor</h2>
+  <form class="add-form" action="{{ url_for('add_site') }}" method="post">
+    <input type="text" name="domain" placeholder="example.com" required
+           aria-label="Domain to monitor">
+    <button type="submit">Add &amp; scan</button>
+  </form>
+  <p class="hint">Only add sites you own or have written permission to test.</p>
+</section>
+
+<section class="card">
+  <h2>Monitored sites</h2>
+  {% if sites %}
+  <div class="table-scroll">
+  <table class="sites">
+    <thead>
+      <tr>
+        <th>Site</th><th>Grade</th><th>Trend</th><th>Last scan</th><th>Uptime 24h</th>
+        <th>High</th><th>Med</th><th>Low</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in sites %}
+      {% set spark = item.trend|sparkline %}
+      <tr>
+        <td>
+          <a href="{{ url_for('site_detail', site_id=item.site.id) }}">{{ item.site.domain }}</a>
+          <div class="site-status muted">
+            {% if item.scanning %}
+              <span class="pill scanning">scanning…</span>
+            {% elif item.actionable == 0 and item.site.last_grade %}
+              All clear — nothing needs attention.
+            {% elif item.actionable > 0 %}
+              {{ item.actionable }} thing{{ 's' if item.actionable != 1 }} need{{ '' if item.actionable != 1 else 's' }} attention.
+            {% else %}
+              No scans yet.
+            {% endif %}
+          </div>
+        </td>
+        <td><span class="grade grade-{{ item.site.last_grade or 'na' }}">{{ item.site.last_grade or '—' }}</span></td>
+        <td>{% if spark %}{{ spark|safe }}{% else %}<span class="spark-note">—</span>{% endif %}</td>
+        <td class="muted">{{ item.site.last_scan_at|humants }}</td>
+        <td>
+          {% if item.uptime_strip %}
+            <span class="uptime-strip" title="Each block is one probe in the last 24h: green = up, red = down">{% for c in item.uptime_strip %}<i class="{% if not c.ok %}down{% endif %}" title="{{ 'down' if not c.ok else 'up' }} · {{ c.at }}"></i>{% endfor %}</span>
+          {% endif %}
+          {% if item.uptime %}
+            {% if item.uptime.ok %}
+              <span class="pill up">● up</span>
+            {% else %}
+              <span class="pill down">● down</span>
+            {% endif %}
+            <span class="muted">{{ item.uptime_pct if item.uptime_pct is not none else '—' }}{{ '%' if item.uptime_pct is not none }}</span>
+          {% else %}
+            <span class="muted">pending…</span>
+          {% endif %}
+        </td>
+        <td><span class="pill high">{{ item.counts.high }}</span></td>
+        <td><span class="pill medium">{{ item.counts.medium }}</span></td>
+        <td><span class="pill low">{{ item.counts.low }}</span></td>
+        <td class="actions">
+          <form action="{{ url_for('scan_now', site_id=item.site.id) }}" method="post" class="inline">
+            <button type="submit" class="btn-small"{% if item.scanning %} disabled{% endif %}>
+              {% if item.scanning %}Scanning…{% else %}Scan now{% endif %}
+            </button>
+          </form>
+          <form action="{{ url_for('delete_site', site_id=item.site.id) }}" method="post" class="inline"
+                onsubmit="return confirm('Stop monitoring {{ item.site.domain }}?');">
+            <button type="submit" class="btn-small danger">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No sites yet. Add your first site above — its first scan starts automatically.</p>
+  {% endif %}
+</section>
+
+{% endblock %}

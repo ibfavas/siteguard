@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Scan {{ scan.id }} &middot; {{ site.domain }} &middot; SiteGuard{% endblock %}
+{% block content %}
+
+<p class="crumbs"><a href="{{ url_for('site_detail', site_id=site.id) }}">&larr; {{ site.domain }}</a></p>
+
+<section class="card">
+  <h2>Scan #{{ scan.id }} — {{ site.domain }}</h2>
+  <p class="muted">Ran {{ scan.started_at|humants }} &middot;
+    {% if scan.status == 'ok' %}finished {{ scan.finished_at|humants }}{% else %}status: {{ scan.status }}{% endif %}
+    &middot; Grade <span class="grade grade-{{ scan.grade or 'na' }}">{{ scan.grade or '—' }}</span>
+    {% if scan.grade %}<span class="grade-meaning">{{ scan.grade|grade_meaning }}</span>{% endif %}
+  </p>
+  {% if scan.status == 'failed' and scan.error %}
+    <p class="flash error">This scan did not complete: {{ scan.error }}</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Findings</h2>
+  {% for sev in ['high', 'medium', 'low'] %}
+    {% if grouped[sev] %}
+      <h3 class="sev-head sev-{{ sev }}">{{ sev|capitalize }} ({{ grouped[sev]|length }})</h3>
+      <p class="muted sev-blurb">{{ blurbs[sev] }}</p>
+      {% for f in grouped[sev] %}
+        <div class="finding sev-{{ sev }}">
+          <div class="finding-title">{{ f.title }}</div>
+          <div class="finding-meta muted">check: {{ f.check_name }}</div>
+          <p><strong>What this means:</strong> {{ f.explanation }}</p>
+          <p><strong>How to fix it:</strong> {{ f.fix }}</p>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endfor %}
+
+  {% if grouped.info %}
+  <details class="info-details">
+    <summary class="sev-head sev-info">
+      Background checks ({{ grouped.info|length }}) — nothing for you to do
+    </summary>
+    <p class="muted sev-blurb">{{ blurbs.info }}</p>
+    {% for f in grouped.info %}
+      <div class="finding sev-info">
+        <div class="finding-title">{{ f.title }}</div>
+        <div class="finding-meta muted">check: {{ f.check_name }}</div>
+        <p><strong>What this means:</strong> {{ f.explanation }}</p>
+        <p><strong>How to fix it:</strong> {{ f.fix }}</p>
+      </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+</section>
+
+{% endblock %}

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: siteguard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # ONE worker only — more workers would run the scan scheduler twice.
+    startCommand: gunicorn app:app --workers 1 --timeout 120 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: SITEGUARD_SECRET_KEY
+        generateValue: true
+      - key: SITEGUARD_HOST
+        value: 0.0.0.0
+      - key: PYTHON_VERSION
+        value: 3.12.0

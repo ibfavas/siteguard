@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Alerts &middot; SiteGuard{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Alerts{% if items %} ({{ items|length }}){% endif %}</h2>
+  {% if items %}
+  <ul class="alert-list">
+    {% for a in items %}
+    <li class="alert-item alert-{{ a.kind }}">
+      <div>
+        <div class="finding-title">{{ a.title }}</div>
+        <div class="muted">{{ a.detail }}</div>
+        <div class="finding-meta muted">{{ a.at|humants }} &middot;
+          <a href="{{ url_for('site_detail', site_id=a.site.id) }}">{{ a.site.domain }}</a></div>
+      </div>
+      {% if a.kind == 'down' %}
+      <span class="pill down">down</span>
+      {% else %}
+      <span class="pill high">new high</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted"><strong>All clear.</strong> No site is down and no new high-severity findings appeared in the latest scans.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Delivery</h2>
+  <ul class="muted settings-list">
+    <li>Email alerts: {% if delivery.email %}<strong>configured</strong> — new high-severity findings trigger an email.{% else %}<strong>not configured</strong> — set the SMTP variables to receive email alerts.{% endif %}</li>
+    <li>WhatsApp alerts: {% if delivery.whatsapp %}<strong>enabled</strong>{% else %}<strong>not integrated yet</strong> — the WhatsApp Business API hookup is still a stub.{% endif %}</li>
+  </ul>
+  <p class="hint">Uptime alerts fire after 2 consecutive failed probes, so a single flapping check won't spam you. See Settings for the current configuration.</p>
+</section>
+
+{% endblock %}

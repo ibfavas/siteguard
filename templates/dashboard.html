@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Dashboard &middot; SiteGuard{% endblock %}
+{% block head_extra %}
+{% if any_scanning %}
+<script>
+// A scan is running somewhere: refresh every 15s until it finishes.
+setTimeout(function () { location.reload(); }, 15000);
+</script>
+{% endif %}
+{% endblock %}
+{% block content %}
+
+<section class="stat-cards">
+  <div class="card stat">
+    <div class="stat-label">Sites monitored</div>
+    <div class="stat-value">{{ stats.sites }}</div>
+    <div class="stat-sub muted">
+      {% if stats.added_this_month %}+{{ stats.added_this_month }} this month{% else %}&nbsp;{% endif %}
+    </div>
+  </div>
+  <div class="card stat">
+    <div class="stat-label">Need attention</div>
+    <div class="stat-value {% if stats.need_attention %}stat-warn{% endif %}">{{ stats.need_attention }}</div>
+    <div class="stat-sub muted">{% if stats.need_attention %}require{{ '' if stats.need_attention != 1 else 's' }} review{% else %}all clear{% endif %}</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-label">Average grade</div>
+    <div class="stat-value">
+      {% if stats.avg_grade %}<span class="grade grade-{{ stats.avg_grade }}">{{ stats.avg_grade }}</span>{% else %}<span class="muted">—</span>{% endif %}
+    </div>
+    <div class="stat-sub muted">across graded sites</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-label">Uptime 24h</div>
+    <div class="stat-value">{% if stats.uptime_24h is not none %}{{ stats.uptime_24h }}%{% else %}<span class="muted">—</span>{% endif %}</div>
+    <div class="stat-sub muted">average across sites</div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Needs attention</h2>
+  {% if need_attention %}
+  <ul class="attention-list">
+    {% for item in need_attention %}
+    <li>
+      <a href="{{ url_for('site_detail', site_id=item.site.id) }}">{{ item.site.domain }}</a>
+      <span class="grade grade-{{ item.site.last_grade or 'na' }}">{{ item.site.last_grade or '—' }}</span>
+      {% if item.counts.high %}<span class="pill high">{{ item.counts.high }} high</span>{% endif %}
+      {% if item.counts.medium %}<span class="pill medium">{{ item.counts.medium }} med</span>{% endif %}
+      {% if item.counts.low %}<span class="pill low">{{ item.counts.low }} low</span>{% endif %}
+      {% if item.scanning %}<span class="pill scanning">scanning…</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Nothing needs attention right now. Add a site on the <a href="{{ url_for('sites') }}">Sites</a> page to start monitoring.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Recent scans</h2>
+  {% if recent_scans %}
+  <div class="table-scroll">
+  <table class="sites">
+    <thead><tr><th>Site</th><th>When</th><th>Status</th><th>Grade</th><th></th></tr></thead>
+    <tbody>
+      {% for s in recent_scans %}
+      <tr{% if s.status == 'running' %} class="row-running"{% endif %}>
+        <td><a href="{{ url_for('site_detail', site_id=s.site_id) }}">{{ s.domain }}</a></td>
+        <td class="muted">{{ s.finished_at|humants if s.finished_at else s.started_at|humants }}</td>
+        <td>
+          {% if s.status == 'running' %}<span class="pill scanning">scanning…</span>
+          {% elif s.status == 'ok' %}<span class="muted">done</span>
+          {% else %}<span class="pill down">failed</span>{% endif %}
+        </td>
+        <td><span class="grade grade-{{ s.grade or 'na' }}">{{ s.grade or '—' }}</span></td>
+        <td>{% if s.status != 'running' %}<a href="{{ url_for('scan_detail', site_id=s.site_id, scan_id=s.id) }}">view</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No scans yet.</p>
+  {% endif %}
+</section>
+
+{% endblock %}

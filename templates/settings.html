@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Settings &middot; SiteGuard{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Settings</h2>
+  <p class="muted">Read-only. Change these with environment variables (see README "Deploying") and restart the app.</p>
+  <div class="table-scroll">
+  <table class="sites settings-table">
+    <tbody>
+      <tr><th>Full re-scan cadence</th><td>every {{ cfg.scan_interval_weeks }} week{{ 's' if cfg.scan_interval_weeks != 1 }}</td></tr>
+      <tr><th>Uptime probe cadence</th><td>every {{ cfg.uptime_interval_minutes }} minutes</td></tr>
+      <tr><th>Request timeout</th><td>{{ cfg.request_timeout }} seconds per request</td></tr>
+      <tr><th>Scanner User-Agent</th><td><code>{{ cfg.user_agent }}</code></td></tr>
+      <tr><th>Alert email</th><td>{% if cfg.alert_email_to %}{{ cfg.alert_email_to }}{% else %}<span class="muted">not set</span>{% endif %}</td></tr>
+      <tr><th>Email sending</th><td>{% if cfg.smtp_enabled %}<span class="pill up">enabled</span>{% else %}<span class="pill scanning">disabled</span> — alerts are logged, not sent{% endif %}</td></tr>
+      <tr><th>Alert on new high-severity findings</th><td>{{ 'on' if cfg.alert_on_new_high else 'off' }}</td></tr>
+      <tr><th>WhatsApp alerts</th><td>{% if cfg.whatsapp_enabled %}<span class="pill up">enabled</span>{% else %}<span class="pill scanning">stub</span> — Business API not integrated yet{% endif %}</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{% endblock %}

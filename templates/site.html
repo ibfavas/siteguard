@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}{{ site.domain }} &middot; SiteGuard{% endblock %}
+{% block head_extra %}
+{% if scanning %}
+<script>
+// A scan is running: refresh every 15s until it finishes.
+setTimeout(function () { location.reload(); }, 15000);
+</script>
+{% endif %}
+{% endblock %}
+{% block content %}
+
+<p class="crumbs"><a href="{{ url_for('dashboard') }}">&larr; Dashboard</a></p>
+
+{% if scanning %}
+<section class="card banner-running" aria-live="polite">
+  <span class="spinner" aria-hidden="true"></span>
+  <div>
+    <strong>Scan in progress…</strong>
+    <span class="muted">started {{ running_since|humants }}. The results below are from the
+    previous finished scan — this page refreshes itself when the new one lands.</span>
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="site-head">
+    <div>
+      <h2>{{ site.domain }}</h2>
+      <p class="muted">
+        Grade <span class="grade grade-{{ site.last_grade or 'na' }}">{{ site.last_grade or '—' }}</span>
+        {% if site.last_grade %}<span class="grade-meaning">{{ site.last_grade|grade_meaning }}</span>{% endif %}
+        {% set hspark = trend|sparkline %}
+        {% if hspark %}<span title="Grade trend across recent scans">{{ hspark|safe }}</span>{% endif %}
+        &middot; Last scan: {{ site.last_scan_at|humants }}
+      </p>
+    </div>
+    <form action="{{ url_for('scan_now', site_id=site.id) }}" method="post">
+      <button type="submit"{% if scanning %} disabled{% endif %}>
+        {% if scanning %}Scanning…{% else %}Scan now{% endif %}
+      </button>
+    </form>
+  </div>
+
+  {% if latest %}
+    {% set n_high = grouped.high|length %}
+    {% set n_med = grouped.medium|length %}
+    {% set n_low = grouped.low|length %}
+    {% set n_info = grouped.info|length %}
+    {% set n_action = n_high + n_med + n_low %}
+    <div class="summary-box {% if n_action == 0 %}all-clear{% endif %}">
+      {% if n_action == 0 %}
+        <strong>All clear.</strong> No actionable issues in the latest scan.
+        {{ n_info }} background check{{ 's' if n_info != 1 }} passed quietly.
+      {% else %}
+        <strong>{{ n_action }} thing{{ 's' if n_action != 1 }} need{{ '' if n_action != 1 else 's' }} your attention:</strong>
+        {% if n_high %}<span class="pill high">{{ n_high }} high</span>{% endif %}
+        {% if n_med %}<span class="pill medium">{{ n_med }} medium</span>{% endif %}
+        {% if n_low %}<span class="pill low">{{ n_low }} low</span>{% endif %}
+        <span class="muted">— start at the top and work down.</span>
+      {% endif %}
+    </div>
+    <p class="muted provenance">Results below are from the scan finished
+      {{ latest.scan.finished_at|humants }} (scan #{{ latest.scan.id }}).</p>
+
+    {% if diff and (diff.new or diff.fixed) %}
+    <div class="diff-box">
+      <details open>
+        <summary>What changed since the last scan
+          {% if diff.new %}<span class="pill high">{{ diff.new|length }} new</span>{% endif %}
+          {% if diff.fixed %}<span class="pill up">{{ diff.fixed|length }} fixed</span>{% endif %}
+        </summary>
+        <div class="diff-lists">
+          {% if diff.new %}
+          <ul class="diff-new">
+            {% for f in diff.new %}
+            <li><strong>{{ f.severity|capitalize }}:</strong> {{ f.title }}
+              <span class="muted">({{ f.check_name }})</span></li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if diff.fixed %}
+          <ul class="diff-fixed">
+            {% for f in diff.fixed %}
+            <li>{{ f.title }} <span class="muted">({{ f.check_name }})</span></li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </details>
+    </div>
+    {% elif diff %}
+    <p class="muted diff-empty">No changes since the last scan — nothing new, nothing fixed.</p>
+    {% endif %}
+  {% endif %}
+</section>
+
+{% if latest %}
+<section class="card">
+  <h2>Findings</h2>
+  {% for sev in ['high', 'medium', 'low'] %}
+    {% if grouped[sev] %}
+      <h3 class="sev-head sev-{{ sev }}">{{ sev|capitalize }} ({{ grouped[sev]|length }})</h3>
+      <p class="muted sev-blurb">{{ blurbs[sev] }}</p>
+      {% for f in grouped[sev] %}
+        <div class="finding sev-{{ sev }}">
+          <div class="finding-title">{{ f.title }}</div>
+          <div class="finding-meta muted">check: {{ f.check_name }}</div>
+          <p><strong>What this means:</strong> {{ f.explanation }}</p>
+          <p><strong>How to fix it:</strong> {{ f.fix }}</p>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endfor %}
+
+  {% if grouped.info %}
+  <details class="info-details">
+    <summary class="sev-head sev-info">
+      Background checks ({{ grouped.info|length }}) — nothing for you to do
+    </summary>
+    <p class="muted sev-blurb">{{ blurbs.info }}</p>
+    {% for f in grouped.info %}
+      <div class="finding sev-info">
+        <div class="finding-title">{{ f.title }}</div>
+        <div class="finding-meta muted">check: {{ f.check_name }}</div>
+        <p><strong>What this means:</strong> {{ f.explanation }}</p>
+        <p><strong>How to fix it:</strong> {{ f.fix }}</p>
+      </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Scan history</h2>
+  <table class="sites">
+    <thead><tr><th>When</th><th>Status</th><th>Grade</th><th>High</th><th>Med</th><th></th></tr></thead>
+    <tbody>
+      {% for s in history %}
+      <tr{% if s.status == 'running' %} class="row-running"{% endif %}>
+        <td>{{ s.started_at|humants }}</td>
+        <td>
+          {% if s.status == 'running' %}
+            <span class="pill scanning">scanning…</span>
+          {% elif s.status == 'ok' %}
+            <span class="muted">done</span>
+          {% else %}
+            <span class="pill down">failed</span>
+          {% endif %}
+        </td>
+        <td><span class="grade grade-{{ s.grade or 'na' }}">{{ s.grade or '—' }}</span></td>
+        <td>{{ s.highs or 0 }}</td>
+        <td>{{ s.mediums or 0 }}</td>
+        <td>
+          {% if s.status == 'running' %}
+            <span class="muted">—</span>
+          {% else %}
+            <a href="{{ url_for('scan_detail', site_id=site.id, scan_id=s.id) }}">view</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% elif not scanning %}
+<section class="card"><p class="muted">No scans yet — a scan is probably running. Refresh in a minute.</p></section>
+{% endif %}
+
+{% endblock %}
