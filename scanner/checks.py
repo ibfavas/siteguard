@@ -199,9 +199,13 @@ def check_security_headers(base_url, homepage_resp=None):
 # ---------------------------------------------------------------------------
 # 3. Exposed admin panels / sensitive files
 # ---------------------------------------------------------------------------
-PANEL_PATHS = [
+# WordPress-only paths: probing them on a non-WordPress site is pure noise,
+# so they are only tested when WordPress is actually detected.
+WP_PANEL_PATHS = [
     "/wp-admin/",
     "/wp-login.php",
+]
+GENERIC_PANEL_PATHS = [
     "/admin/",
     "/administrator/",
     "/login",
@@ -209,9 +213,49 @@ PANEL_PATHS = [
     "/server-status",
     "/server-info",
 ]
+# Kept for backwards compatibility (tests, imports).
+PANEL_PATHS = WP_PANEL_PATHS + GENERIC_PANEL_PATHS
+
+# Markers that indicate the page really is a login/admin screen, not a
+# soft-404 or marketing page that happens to answer 200.
+_LOGIN_MARKERS = (
+    'type="password"', "type='password'",
+    "username", "user_login",
+    "log in", "login", "sign in",
+    "wp-login", "wp-admin",
+    "administrator", "dashboard",
+)
 
 
-def check_admin_panels(base_url):
+def _wordpress_detected(base_url, homepage_resp=None):
+    """Lightweight WordPress detection used to gate WP-specific probes."""
+    try:
+        r = fetch(base_url + "/wp-json/")
+        if r.status_code == 200 and "namespaces" in (r.text or ""):
+            return True
+    except Exception:
+        pass
+    try:
+        resp = homepage_resp or fetch(base_url)
+        text = resp.text or ""
+        if re.search(r"wp-content|wp-includes|/wp-json/", text):
+            return True
+        if re.search(r'<meta[^>]+name=["\']generator["\'][^>]*wordpress',
+                     text, re.IGNORECASE):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _looks_like_login_page(text):
+    """Heuristic: does this 200 page actually look like a login screen?"""
+    t = (text or "").lower()
+    hits = sum(1 for m in _LOGIN_MARKERS if m in t)
+    return hits >= 2
+
+
+def check_admin_panels(base_url, homepage_resp=None):
     check = "admin_panels"
     findings = []
     try:
@@ -242,7 +286,13 @@ def check_admin_panels(base_url):
             baseline = _soft404_baseline(base_url)
         except Exception:
             baseline = None
-        for path in PANEL_PATHS:
+        # WordPress-only paths are noise on non-WordPress sites: only probe
+        # them when WordPress is actually detected.
+        is_wp = _wordpress_detected(base_url, homepage_resp)
+        paths = list(GENERIC_PANEL_PATHS)
+        if is_wp:
+            paths = WP_PANEL_PATHS + paths
+        for path in paths:
             try:
                 r = fetch(base_url + path)
             except Exception:
@@ -250,10 +300,14 @@ def check_admin_panels(base_url):
             if r.status_code == 200:
                 if _is_soft_404(r, baseline):
                     continue  # the site's 404 page wearing a 200 status
+                if not _looks_like_login_page(r.text):
+                    continue  # 200, but not actually a login screen
                 findings.append(make_finding(
                     check, MEDIUM, "panel_exposed",
                     {"path": path, "status": 200}, path=path, protected=""))
             elif r.status_code in (401, 403):
+                if path in WP_PANEL_PATHS and not is_wp:
+                    continue  # e.g. a WAF blocking the path pattern, not WP
                 findings.append(make_finding(
                     check, LOW, "panel_exposed",
                     {"path": path, "status": r.status_code}, path=path,
@@ -828,9 +882,19 @@ def _is_soft_404(resp, baseline):
         return False
     body_len = len(resp.text or "")
     body = re.sub(r"\s+", " ", resp.text or "")[:2000]
-    return (baseline["status"] == 200
-            and abs(body_len - baseline["length"]) < 200
-            and body == baseline["text"])
+    if not (baseline["status"] == 200
+            and abs(body_len - baseline["length"]) < 200):
+        return False
+    if body == baseline["text"]:
+        return True
+    # Fallback for 404 pages with dynamic bits (timestamps, request IDs,
+    # CSRF tokens): normalize digits, then fuzzy-compare.
+    base_norm = re.sub(r"\d+", "#", baseline["text"])
+    body_norm = re.sub(r"\d+", "#", body)
+    if base_norm == body_norm:
+        return True
+    import difflib
+    return difflib.SequenceMatcher(None, baseline["text"], body).ratio() > 0.92
 
 
 def _text_has(*needles, min_len=100):
