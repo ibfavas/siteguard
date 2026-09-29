@@ -8,6 +8,8 @@ week. Built for a one-person VAPT freelancer: zero budget, runs locally.
 **Important:** only scan sites you own or have written permission to test.
 Probing admin paths on third-party sites without authorization may be illegal.
 
+![SiteGuard dashboard](assets/siteguard-dashboard.png)
+
 ## Quick start
 
 ```bash
